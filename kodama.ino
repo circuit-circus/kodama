@@ -14,6 +14,14 @@
 // Define the array of leds
 CRGB leds[NUM_LEDS];
 
+// Set a brightness level goal for each LED to reach
+int brightnessGoals[NUM_LEDS];
+// What should the maximum distance to new brightness goal be?
+int brightnessDistanceMax = 20;
+
+int minBrightness = 25;
+int maxBrightness = 75;
+
 int pirState = LOW; // we start, assuming no motion detected
 int val = 0; // variable for reading the pin status
 
@@ -22,11 +30,13 @@ float persistence = 0.25;
 //octaves are the number of "layers" of noise that get computed
 int octaves = 1;
 
-int actualActivity; // Previously cutoff
+int actualActivity = 0; // Previously cutoff
 const int maxActivity = 100; 
 int activityDelay = 5;
 
 bool useUltrasound = false;
+
+bool isDebugging = false;
 
 void setup() {
 	delay(2000);
@@ -42,6 +52,10 @@ void setup() {
 
 	FastLED.addLeds<WS2811, DATA_PIN, RGB>(leds, NUM_LEDS);
 	FastLED.clear();
+
+	for(int i = 0; i < NUM_LEDS; i++) {
+		brightnessGoals[i] = 0;
+	}
 }
 
 void loop() {
@@ -54,9 +68,25 @@ void loop() {
 	// Make sure actualActivity is between maxActivity * activityDelay and 0
 	actualActivity = constrain(actualActivity, 0, maxActivity * activityDelay);
 
-	int delayedActivity = actualActivity / activityDelay;
-	Serial.print("Activity: ");
-	Serial.println(delayedActivity);
+	int longtermActivity = actualActivity / activityDelay;
+	debugInt("longtermActivity: ", longtermActivity, false);
+	debugInt("actualActivity: ", actualActivity, true);
+
+	if(actualActivity > 150) {
+		brightnessDistanceMax = 35;
+		minBrightness = 0;
+		maxBrightness = 0;
+	}
+	else if(actualActivity > 0) {
+		brightnessDistanceMax = 20;
+		minBrightness = 150;
+		maxBrightness = 225;
+	}
+	else {
+		brightnessDistanceMax = 20;
+		minBrightness = 25;
+		maxBrightness = 75;
+	}
 
 	// Source Ultrasound: http://www.instructables.com/id/Simple-Arduino-and-HC-SR04-Example/
 	// Source PIR: https://learn.adafruit.com/pir-passive-infrared-proximity-motion-sensor?view=all
@@ -73,59 +103,53 @@ void loop() {
 		duration = pulseIn(ECHOPIN, HIGH);
 		distance = (duration / 2) / 29.1;
 
-		Serial.print(distance);
-		Serial.println(" cm");
+		debugLong("CM: ", distance, false);
 		delay(500);
 	}
 	else {
 		int pirVal = digitalRead(PIRPIN);
-		Serial.println(val);
-		delay(250);
+		debugInt("PIRVAL: ", pirVal, true);
+		// delay(250);
 	}
 
-	Serial.println("------------LOOP START-------------");
+	debugString("------------LOOP START-------------", false);
 	// Turn the LED on, then pause
 	for(int i = 0; i < NUM_LEDS; i++) {
-		Serial.println("------------LED IN-------------");
-		// 128 are magic numbers that make contrast hit somewhere between 0 and 255 when multiplied by PerlinNoise(which returns a number between 0 and 1)
-		float contrast = PerlinNoise2(i, rnd, persistence, octaves) * 128 + 128;
-		Serial.print("Contrast: ");
-		Serial.println(contrast);
+		debugString("------------LED IN-------------", false);
+		float contrast;
+		// The goal is reached, when is it 0
+		if(brightnessGoals[i] == 0) {
+			// A number between -1 and 1
+			contrast = PerlinNoise2(i, rnd, persistence, octaves);
+			debugFloat("Contrast: ", contrast, false);
+			// Set the goal to contrast multiplied by max distance
+			brightnessGoals[i] = contrast * brightnessDistanceMax;
 
-		// aendr contrast så den passer til aktivitets-niveauet
-		// Contrast must be larger than 0
-		contrast = max(contrast - delayedActivity, 0);
-		Serial.print("Contrast(max): ");
-		Serial.println(contrast);
-		// Slightly vary contrast
-		contrast *= ((255 + delayedActivity) / (255 - delayedActivity));
-		// Then make sure it's below 255
-		contrast = min(contrast, 255);
-		Serial.print("Contrast(min): ");
-		Serial.println(contrast);
-		// Contrast should be mapped to a number between 1 and double delayedActivity + 55
-		// plus 55, since delayedActivity can be max 100, and 255 is max color value)
-		contrast = map(contrast, 0, 255, 1, delayedActivity * 2 + 55);
-		Serial.print("Contrast(map): ");
-		Serial.println(contrast);
+			if(i == 0) {
+				debugInt("New goal: ", brightnessGoals[i], false);
+			}
+		}
 
-		byte r = contrast * (delayedActivity / maxActivity);
-		Serial.print("RGB: ");
-		Serial.print(r);
-		byte g = contrast * ((maxActivity - delayedActivity) / maxActivity); 
-		Serial.print(", ");
-		Serial.print(g);
-		byte b = constrain((contrast * (delayedActivity / maxActivity)), 0, 50);
-		Serial.print(", ");
-		Serial.println(b);
+		int brightnessChange = brightnessGoals[i] < 0 ? -1 : 1;
+		// Clamp brightness 
+		byte brightness = constrain(leds[i].red + brightnessChange, minBrightness, maxBrightness);
 
-		leds[i].red = g;
-		leds[i].green = g;
-		leds[i].blue = g;
+		if(i == 0) {
+			debugInt("Goal: ", brightnessGoals[i], false);
+			debugFloat("Brightness: ", float(brightness), false);
+		}
+
+		leds[i].red = brightness;
+		leds[i].green = brightness;
+		leds[i].blue = brightness;
 		FastLED.show();
-		Serial.println("------------LED OUT-------------");
+
+		// Make the goal move one closer to 0
+		brightnessGoals[i] += brightnessGoals[i] < 0 ? 1 : -1;
+
+		debugString("------------LED OUT-------------", false);
 	}
-	Serial.println("------------LOOP STOP-------------");
+	debugString("------------LOOP STOP-------------", false);
 }
 
 // Helper functions
@@ -196,4 +220,31 @@ float PerlinNoise2(float x, float y, float persistance, int octaves) {
   }
 
   return(total);
+}
+
+void debugLong(char text[], long value, bool override) {
+	if(isDebugging || override) {
+		Serial.print(text);
+		Serial.println(value);
+	}
+}
+
+void debugInt(char text[], int value, bool override) {
+	if(isDebugging || override) {
+		Serial.print(text);
+		Serial.println(value);
+	}
+}
+
+void debugString(char text[], bool override) {
+	if(isDebugging || override) {
+		Serial.println(text);
+	}
+}
+
+void debugFloat(char text[], float value, bool override) {
+	if(isDebugging || override) {
+		Serial.print(text);
+		Serial.println(value);
+	}
 }
