@@ -18,6 +18,8 @@ CRGB leds[NUM_LEDS];
 int brightnessGoals[NUM_LEDS];
 // What should the maximum distance to new brightness goal be?
 int brightnessDistanceMax = 20;
+int shouldJumpBrightness = false;
+int wasBrightnessJustChanged = false;
 
 int minBrightness = 25;
 int maxBrightness = 75;
@@ -29,8 +31,10 @@ int val = 0; // variable for reading the pin status
 float persistence = 0.25;
 //octaves are the number of "layers" of noise that get computed
 int octaves = 1;
+float rnd = 0.0f;
 
 int actualActivity = 0; // Previously cutoff
+int lastChangedActivity = 150;
 const int maxActivity = 100; 
 int activityDelay = 5;
 
@@ -59,10 +63,16 @@ void setup() {
 }
 
 void loop() {
-	float rnd = float(millis())/100.0f;
+	rnd = float(millis())/100.0f;
 
-	val = digitalRead(PIRPIN); // read input value
+	readSensors();
 
+	reactToActivity();
+
+	calculateLEDs();
+}
+
+void reactToActivity() {
 	// Get non-delayed activity level
 	actualActivity += (val == HIGH) ? 1 : -1;
 	// Make sure actualActivity is between maxActivity * activityDelay and 0
@@ -70,23 +80,34 @@ void loop() {
 
 	int longtermActivity = actualActivity / activityDelay;
 	debugInt("longtermActivity: ", longtermActivity, false);
-	debugInt("actualActivity: ", actualActivity, true);
+	debugInt("actualActivity: ", actualActivity, false);
 
-	if(actualActivity > 150) {
+	// TODO: MAKE THIS RUN ONLY ONCE
+	if(actualActivity > 150 /*&& lastChangedActivity != 150*/) {
 		brightnessDistanceMax = 35;
 		minBrightness = 0;
 		maxBrightness = 0;
+		lastChangedActivity = 150;
+		wasBrightnessJustChanged = true;
 	}
-	else if(actualActivity > 0) {
+	else if(actualActivity > 0 /*&& lastChangedActivity != 25*/) {
 		brightnessDistanceMax = 20;
 		minBrightness = 150;
 		maxBrightness = 225;
+		lastChangedActivity = 25;
+		wasBrightnessJustChanged = true;
 	}
-	else {
+	else /*if(lastChangedActivity != 0)*/ {
 		brightnessDistanceMax = 20;
+		lastChangedActivity = 0;
 		minBrightness = 25;
 		maxBrightness = 75;
+		wasBrightnessJustChanged = true;
 	}
+}
+
+void readSensors() {
+	val = digitalRead(PIRPIN); // read input value
 
 	// Source Ultrasound: http://www.instructables.com/id/Simple-Arduino-and-HC-SR04-Example/
 	// Source PIR: https://learn.adafruit.com/pir-passive-infrared-proximity-motion-sensor?view=all
@@ -108,16 +129,18 @@ void loop() {
 	}
 	else {
 		int pirVal = digitalRead(PIRPIN);
-		debugInt("PIRVAL: ", pirVal, true);
+		debugInt("PIRVAL: ", pirVal, false);
 		// delay(250);
 	}
+}
 
+void calculateLEDs() {
 	debugString("------------LOOP START-------------", false);
 	// Turn the LED on, then pause
 	for(int i = 0; i < NUM_LEDS; i++) {
 		debugString("------------LED IN-------------", false);
 		float contrast;
-		// The goal is reached, when is it 0
+		// The goal is reached, when it is 0
 		if(brightnessGoals[i] == 0) {
 			// A number between -1 and 1
 			contrast = PerlinNoise2(i, rnd, persistence, octaves);
@@ -131,18 +154,27 @@ void loop() {
 		}
 
 		int brightnessChange = brightnessGoals[i] < 0 ? -1 : 1;
+		int brightness = 0;
+
+		if(wasBrightnessJustChanged) {
+			debugInt("Minbright - ledsred: ", minBrightness - leds[i].red, true);
+			for(int j = leds[i].red; j < minBrightness - leds[i].red; j++) {
+				debugInt("j: ", j, true);
+				brightness = j;
+				updateLEDs(i, brightness);
+			}
+			wasBrightnessJustChanged = false;
+		}
+
 		// Clamp brightness 
-		byte brightness = constrain(leds[i].red + brightnessChange, minBrightness, maxBrightness);
+		brightness = constrain(leds[i].red + brightnessChange, minBrightness, maxBrightness);
 
 		if(i == 0) {
 			debugInt("Goal: ", brightnessGoals[i], false);
 			debugFloat("Brightness: ", float(brightness), false);
 		}
 
-		leds[i].red = brightness;
-		leds[i].green = brightness;
-		leds[i].blue = brightness;
-		FastLED.show();
+		updateLEDs(i, brightness);
 
 		// Make the goal move one closer to 0
 		brightnessGoals[i] += brightnessGoals[i] < 0 ? 1 : -1;
@@ -150,6 +182,13 @@ void loop() {
 		debugString("------------LED OUT-------------", false);
 	}
 	debugString("------------LOOP STOP-------------", false);
+}
+
+void updateLEDs(int LEDId, int brightness) {
+	leds[LEDId].red = brightness;
+	leds[LEDId].green = brightness;
+	leds[LEDId].blue = brightness;
+	FastLED.show();
 }
 
 // Helper functions
