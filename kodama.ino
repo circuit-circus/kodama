@@ -83,27 +83,27 @@ void reactToActivity() {
 	debugInt("actualActivity: ", actualActivity, false);
 
 	// TODO: MAKE THIS RUN ONLY ONCE
-	if(actualActivity > 150 /*&& lastChangedActivity != 150*/) {
+	/*if(actualActivity > 150 && lastChangedActivity != 150) {
 		brightnessDistanceMax = 35;
 		minBrightness = 0;
 		maxBrightness = 0;
 		lastChangedActivity = 150;
 		wasBrightnessJustChanged = true;
 	}
-	else if(actualActivity > 0 /*&& lastChangedActivity != 25*/) {
+	else if(actualActivity > 0 && lastChangedActivity != 25) {
 		brightnessDistanceMax = 20;
 		minBrightness = 150;
 		maxBrightness = 225;
 		lastChangedActivity = 25;
 		wasBrightnessJustChanged = true;
 	}
-	else /*if(lastChangedActivity != 0)*/ {
+	else if(lastChangedActivity != 0) {*/
 		brightnessDistanceMax = 20;
 		lastChangedActivity = 0;
 		minBrightness = 25;
 		maxBrightness = 75;
 		wasBrightnessJustChanged = true;
-	}
+	//}
 }
 
 void readSensors() {
@@ -159,7 +159,7 @@ void calculateLEDs() {
 		if(wasBrightnessJustChanged) {
 			debugInt("Minbright - ledsred: ", minBrightness - leds[i].red, true);
 			for(int j = leds[i].red; j < minBrightness - leds[i].red; j++) {
-				debugInt("j: ", j, true);
+				debugInt("j: ", j, false);
 				brightness = j;
 				updateLEDs(i, brightness);
 			}
@@ -173,7 +173,7 @@ void calculateLEDs() {
 			debugInt("Goal: ", brightnessGoals[i], false);
 			debugFloat("Brightness: ", float(brightness), false);
 		}
-
+    debugFloat("Brightness: ", float(brightness), true);
 		updateLEDs(i, brightness);
 
 		// Make the goal move one closer to 0
