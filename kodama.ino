@@ -2,14 +2,10 @@
 
 #include "FastLED.h"
 
-#define NUM_LEDS 5
+#define NUM_LEDS 50
 
-#define ECHOPIN 12
-#define TRIGPIN 13
-#define PIRPIN 12
-
-#define DATA_PIN 3
-#define CLOCK_PIN 13
+#define PIRPIN D3
+#define LEDPIN D4
 
 // Define the array of leds
 CRGB leds[NUM_LEDS];
@@ -38,23 +34,15 @@ int lastChangedActivity = 150;
 const int maxActivity = 100; 
 int activityDelay = 5;
 
-bool useUltrasound = false;
-
 bool isDebugging = false;
 
 void setup() {
 	delay(2000);
 	Serial.begin(9600);
 
-	if(useUltrasound) {
-		pinMode(ECHOPIN, INPUT);
-		pinMode(TRIGPIN, OUTPUT);
-	}
-	else {
-		pinMode(PIRPIN, INPUT);
-	}
+	pinMode(PIRPIN, INPUT);
 
-	FastLED.addLeds<WS2811, DATA_PIN, RGB>(leds, NUM_LEDS);
+	FastLED.addLeds<WS2811, LEDPIN, RGB>(leds, NUM_LEDS);
 	FastLED.clear();
 
 	for(int i = 0; i < NUM_LEDS; i++) {
@@ -82,8 +70,7 @@ void reactToActivity() {
 	debugInt("longtermActivity: ", longtermActivity, false);
 	debugInt("actualActivity: ", actualActivity, false);
 
-	// TODO: MAKE THIS RUN ONLY ONCE
-	/*if(actualActivity > 150 && lastChangedActivity != 150) {
+	if(actualActivity > 150 && lastChangedActivity != 150) {
 		brightnessDistanceMax = 35;
 		minBrightness = 0;
 		maxBrightness = 0;
@@ -97,41 +84,19 @@ void reactToActivity() {
 		lastChangedActivity = 25;
 		wasBrightnessJustChanged = true;
 	}
-	else if(lastChangedActivity != 0) {*/
-		brightnessDistanceMax = 20;
+	else if(lastChangedActivity != 0) {
+		brightnessDistanceMax = 40;
 		lastChangedActivity = 0;
-		minBrightness = 25;
-		maxBrightness = 75;
+		minBrightness = 0;
+		maxBrightness = 60;
 		wasBrightnessJustChanged = true;
-	//}
+	}
 }
 
 void readSensors() {
 	val = digitalRead(PIRPIN); // read input value
-
-	// Source Ultrasound: http://www.instructables.com/id/Simple-Arduino-and-HC-SR04-Example/
-	// Source PIR: https://learn.adafruit.com/pir-passive-infrared-proximity-motion-sensor?view=all
-	if(useUltrasound) {
-		Serial.println("All good");
-		long duration, distance;
-
-		digitalWrite(TRIGPIN, LOW);
-		delayMicroseconds(2);
-		digitalWrite(TRIGPIN, HIGH);
-		delayMicroseconds(10);
-		digitalWrite(TRIGPIN, LOW);
-
-		duration = pulseIn(ECHOPIN, HIGH);
-		distance = (duration / 2) / 29.1;
-
-		debugLong("CM: ", distance, false);
-		delay(500);
-	}
-	else {
-		int pirVal = digitalRead(PIRPIN);
-		debugInt("PIRVAL: ", pirVal, false);
-		// delay(250);
-	}
+  Serial.println(val);
+	debugInt("PIRVAL: ", val, false);
 }
 
 void calculateLEDs() {
@@ -173,7 +138,7 @@ void calculateLEDs() {
 			debugInt("Goal: ", brightnessGoals[i], false);
 			debugFloat("Brightness: ", float(brightness), false);
 		}
-    debugFloat("Brightness: ", float(brightness), true);
+    debugFloat("Brightness: ", float(brightness), false);
 		updateLEDs(i, brightness);
 
 		// Make the goal move one closer to 0
