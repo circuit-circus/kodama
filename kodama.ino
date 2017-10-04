@@ -2,26 +2,34 @@
 
 #include "FastLED.h"
 
-#define NUM_LEDS 50
 
-#define PIRPIN D3
-#define LEDPIN D4
+//#define PIRPIN A5
+//#define LEDPIN 7
+
+#define NO_OF_CLUSTERS 5
+#define NUM_LEDS 25
+
+int pirPins[NO_OF_CLUSTERS] = {A1, A2, A3, A4, A5};
+const int ledPins[NO_OF_CLUSTERS] = {2, 3, 4, 5, 6};
+
+int pirStates[NO_OF_CLUSTERS] = {LOW, LOW, LOW, LOW, LOW};
+int pirVals[NO_OF_CLUSTERS] = {0, 0, 0, 0, 0};
 
 // Define the array of leds
-CRGB leds[NUM_LEDS];
+CRGB leds[NO_OF_CLUSTERS][NUM_LEDS];
 
 // Set a brightness level goal for each LED to reach
-int brightnessGoals[NUM_LEDS];
+int brightnessGoals[NO_OF_CLUSTERS][NUM_LEDS];
 // What should the maximum distance to new brightness goal be?
-int brightnessDistanceMax = 20;
-int shouldJumpBrightness = false;
-int wasBrightnessJustChanged = false;
+int brightnessDistanceMax[NO_OF_CLUSTERS] = {20, 20, 20, 20, 20};
+int shouldJumpBrightness[NO_OF_CLUSTERS] = {false, false, false, false, false};
+int wasBrightnessJustChanged[NO_OF_CLUSTERS] = {false, false, false, false, false};
 
-int minBrightness = 25;
-int maxBrightness = 75;
+int minBrightness[NO_OF_CLUSTERS] = {25, 25, 25, 25, 25};
+int maxBrightness[NO_OF_CLUSTERS] = {75, 75, 75, 75, 75};
 
-int pirState = LOW; // we start, assuming no motion detected
-int val = 0; // variable for reading the pin status
+//int pirState = LOW; // we start, assuming no motion detected
+//int val = 0; // variable for reading the pin status
 
 //persistence affects the degree to which the "finer" noise is seen
 float persistence = 0.25;
@@ -29,10 +37,11 @@ float persistence = 0.25;
 int octaves = 1;
 float rnd = 0.0f;
 
-int actualActivity = 0; // Previously cutoff
-int lastChangedActivity = 150;
-const int maxActivity = 100; 
-int activityDelay = 5;
+int actualActivities[NO_OF_CLUSTERS] = {0, 0, 0, 0, 0};
+int lastChangedActivities[NO_OF_CLUSTERS] = {150, 150, 150, 150, 150};
+int maxActivities[NO_OF_CLUSTERS] = {100, 100, 100, 100, 100};
+int activityDelays[NO_OF_CLUSTERS] = {5, 5, 5, 5, 5};
+
 
 bool isDebugging = false;
 
@@ -40,14 +49,19 @@ void setup() {
 	delay(2000);
 	Serial.begin(9600);
 
-	pinMode(PIRPIN, INPUT);
+  for (int i = 0; i < NO_OF_CLUSTERS; i++) {
+    pinMode(pirPins[i], INPUT);
 
-	FastLED.addLeds<WS2811, LEDPIN, RGB>(leds, NUM_LEDS);
-	FastLED.clear();
+    for(int j = 0; j < NUM_LEDS; j++) {
+      brightnessGoals[i][j] = 0;
+    }
+  }
 
-	for(int i = 0; i < NUM_LEDS; i++) {
-		brightnessGoals[i] = 0;
-	}
+  FastLED.addLeds<NEOPIXEL, 2>(leds[0], NUM_LEDS);
+  FastLED.addLeds<NEOPIXEL, 3>(leds[1], NUM_LEDS);
+  FastLED.addLeds<NEOPIXEL, 4>(leds[2], NUM_LEDS);
+  FastLED.addLeds<NEOPIXEL, 5>(leds[3], NUM_LEDS);
+  FastLED.addLeds<NEOPIXEL, 6>(leds[4], NUM_LEDS);
 }
 
 void loop() {
@@ -62,97 +76,105 @@ void loop() {
 
 void reactToActivity() {
 	// Get non-delayed activity level
-	actualActivity += (val == HIGH) ? 1 : -1;
-	// Make sure actualActivity is between maxActivity * activityDelay and 0
-	actualActivity = constrain(actualActivity, 0, maxActivity * activityDelay);
 
-	int longtermActivity = actualActivity / activityDelay;
-	debugInt("longtermActivity: ", longtermActivity, false);
-	debugInt("actualActivity: ", actualActivity, false);
-
-	if(actualActivity > 150 && lastChangedActivity != 150) {
-		brightnessDistanceMax = 35;
-		minBrightness = 0;
-		maxBrightness = 0;
-		lastChangedActivity = 150;
-		wasBrightnessJustChanged = true;
-	}
-	else if(actualActivity > 0 && lastChangedActivity != 25) {
-		brightnessDistanceMax = 20;
-		minBrightness = 150;
-		maxBrightness = 225;
-		lastChangedActivity = 25;
-		wasBrightnessJustChanged = true;
-	}
-	else if(lastChangedActivity != 0) {
-		brightnessDistanceMax = 40;
-		lastChangedActivity = 0;
-		minBrightness = 0;
-		maxBrightness = 60;
-		wasBrightnessJustChanged = true;
-	}
+  for(int i = 0; i < NO_OF_CLUSTERS; i++) {
+  	actualActivities[i] += (pirVals[i] == HIGH) ? 1 : -1;
+  	// Make sure actualActivity is between maxActivity * activityDelay and 0
+  	actualActivities[i] = constrain(actualActivities[i], 0, maxActivities[i] * activityDelays[i]);
+  
+  	int longtermActivity = actualActivities[i] / activityDelays[i];
+  	debugInt("longtermActivity: ", longtermActivity, false);
+  	//debugInt(char("actualActivity for " + char(i) + ": "), actualActivities[i], false);
+  
+  	if(actualActivities[i] > 150 && lastChangedActivities[i] != 150) {
+  		brightnessDistanceMax[i] = 35;
+  		minBrightness[i] = 0;
+  		maxBrightness[i] = 0;
+  		lastChangedActivities[i] = 150;
+  		wasBrightnessJustChanged[i] = true;
+  	}
+  	else if(actualActivities[i] > 0 && lastChangedActivities[i] != 25) {
+  		brightnessDistanceMax[i] = 20;
+  		minBrightness[i] = 150;
+  		maxBrightness[i] = 225;
+  		lastChangedActivities[i] = 25;
+  		wasBrightnessJustChanged[i] = true;
+  	}
+  	else if(lastChangedActivities[i] != 0) {
+  		brightnessDistanceMax[i] = 40;
+  		lastChangedActivities[i] = 0;
+  		minBrightness[i] = 0;
+  		maxBrightness[i] = 60;
+  		wasBrightnessJustChanged[i] = true;
+  	}
+  }
 }
 
 void readSensors() {
-	val = digitalRead(PIRPIN); // read input value
-  Serial.println(val);
-	debugInt("PIRVAL: ", val, false);
+
+  for(int i = 0; i < NO_OF_CLUSTERS; i++) {
+    pirVals[i] = digitalRead(pirPins[i]); // read input value
+    Serial.println(pirVals[i]);
+    //debugInt(char("PIRVAL " + char(i) + ": "), pirVals[i], false);
+  }
 }
 
 void calculateLEDs() {
-	debugString("------------LOOP START-------------", false);
-	// Turn the LED on, then pause
-	for(int i = 0; i < NUM_LEDS; i++) {
-		debugString("------------LED IN-------------", false);
-		float contrast;
-		// The goal is reached, when it is 0
-		if(brightnessGoals[i] == 0) {
-			// A number between -1 and 1
-			contrast = PerlinNoise2(i, rnd, persistence, octaves);
-			debugFloat("Contrast: ", contrast, false);
-			// Set the goal to contrast multiplied by max distance
-			brightnessGoals[i] = contrast * brightnessDistanceMax;
-
-			if(i == 0) {
-				debugInt("New goal: ", brightnessGoals[i], false);
-			}
-		}
-
-		int brightnessChange = brightnessGoals[i] < 0 ? -1 : 1;
-		int brightness = 0;
-
-		if(wasBrightnessJustChanged) {
-			debugInt("Minbright - ledsred: ", minBrightness - leds[i].red, true);
-			for(int j = leds[i].red; j < minBrightness - leds[i].red; j++) {
-				debugInt("j: ", j, false);
-				brightness = j;
-				updateLEDs(i, brightness);
-			}
-			wasBrightnessJustChanged = false;
-		}
-
-		// Clamp brightness 
-		brightness = constrain(leds[i].red + brightnessChange, minBrightness, maxBrightness);
-
-		if(i == 0) {
-			debugInt("Goal: ", brightnessGoals[i], false);
-			debugFloat("Brightness: ", float(brightness), false);
-		}
-    debugFloat("Brightness: ", float(brightness), false);
-		updateLEDs(i, brightness);
-
-		// Make the goal move one closer to 0
-		brightnessGoals[i] += brightnessGoals[i] < 0 ? 1 : -1;
-
-		debugString("------------LED OUT-------------", false);
-	}
-	debugString("------------LOOP STOP-------------", false);
+  for(int k = 0; k < NO_OF_CLUSTERS; k++) {
+  	debugString("------------LOOP START-------------", false);
+  	// Turn the LED on, then pause
+  	for(int i = 0; i < NUM_LEDS; i++) {
+  		debugString("------------LED IN-------------", false);
+  		float contrast;
+  		// The goal is reached, when it is 0
+  		if(brightnessGoals[k][i] == 0) {
+  			// A number between -1 and 1
+  			contrast = PerlinNoise2(i, rnd, persistence, octaves);
+  			debugFloat("Contrast: ", contrast, false);
+  			// Set the goal to contrast multiplied by max distance
+  			brightnessGoals[k][i] = contrast * brightnessDistanceMax[i];
+  
+  			if(i == 0) {
+  				debugInt("New goal: ", brightnessGoals[k][i], false);
+  			}
+  		}
+  
+  		int brightnessChange = brightnessGoals[k][i] < 0 ? -1 : 1;
+  		int brightness = 0;
+  
+  		if(wasBrightnessJustChanged[k]) {
+  			debugInt("Minbright - ledsred: ", minBrightness[k] - leds[k][i].red, true);
+  			for(int j = leds[k][i].red; j < minBrightness[k] - leds[k][i].red; j++) {
+  				debugInt("j: ", j, false);
+  				brightness = j;
+  				updateLEDs(k, i, brightness);
+  			}
+  			wasBrightnessJustChanged[k] = false;
+  		}
+  
+  		// Clamp brightness 
+  		brightness = constrain(leds[k][i].red + brightnessChange, minBrightness[k], maxBrightness[k]);
+  
+  		if(i == 0) {
+  			debugInt("Goal: ", brightnessGoals[i], false);
+  			debugFloat("Brightness: ", float(brightness), false);
+  		}
+      debugFloat("Brightness: ", float(brightness), false);
+  		updateLEDs(k, i, brightness);
+  
+  		// Make the goal move one closer to 0
+  		brightnessGoals[k][i] += brightnessGoals[k][i] < 0 ? 1 : -1;
+  
+  		debugString("------------LED OUT-------------", false);
+  	}
+  	debugString("------------LOOP STOP-------------", false);
+  }
 }
 
-void updateLEDs(int LEDId, int brightness) {
-	leds[LEDId].red = brightness;
-	leds[LEDId].green = brightness;
-	leds[LEDId].blue = brightness;
+void updateLEDs(int cluster, int pixel, int brightness) {
+	leds[cluster][pixel].red = brightness;
+	leds[cluster][pixel].green = brightness;
+	leds[cluster][pixel].blue = brightness;
 	FastLED.show();
 }
 
