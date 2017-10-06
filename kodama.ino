@@ -46,7 +46,7 @@ int activityDelays[NO_OF_CLUSTERS] = {5, 5, 5, 5, 5};
 bool isDebugging = false;
 
 void setup() {
-	delay(2000);
+
 	Serial.begin(9600);
 
   for (int i = 0; i < NO_OF_CLUSTERS; i++) {
@@ -78,33 +78,24 @@ void reactToActivity() {
 	// Get non-delayed activity level
 
   for(int i = 0; i < NO_OF_CLUSTERS; i++) {
-  	actualActivities[i] += (pirVals[i] == HIGH) ? 1 : -1;
+  	actualActivities[i] += (pirVals[i] == HIGH) ? 1 : -3;
   	// Make sure actualActivity is between maxActivity * activityDelay and 0
   	actualActivities[i] = constrain(actualActivities[i], 0, maxActivities[i] * activityDelays[i]);
   
   	int longtermActivity = actualActivities[i] / activityDelays[i];
-  	debugInt("longtermActivity: ", longtermActivity, false);
-  	//debugInt(char("actualActivity for " + char(i) + ": "), actualActivities[i], false);
-  
-  	if(actualActivities[i] > 150 && lastChangedActivities[i] != 150) {
-  		brightnessDistanceMax[i] = 35;
-  		minBrightness[i] = 0;
-  		maxBrightness[i] = 0;
-  		lastChangedActivities[i] = 150;
-  		wasBrightnessJustChanged[i] = true;
-  	}
-  	else if(actualActivities[i] > 0 && lastChangedActivities[i] != 25) {
-  		brightnessDistanceMax[i] = 20;
-  		minBrightness[i] = 150;
-  		maxBrightness[i] = 225;
+    if(actualActivities[i] > 10 && lastChangedActivities[i] != 25) {
+  		brightnessDistanceMax[i] = 40;
+  		minBrightness[i] = 25;
+  		maxBrightness[i] = 49;
   		lastChangedActivities[i] = 25;
   		wasBrightnessJustChanged[i] = true;
   	}
-  	else if(lastChangedActivities[i] != 0) {
+    // Calm mode
+  	else if(actualActivities[i] < 10) {
   		brightnessDistanceMax[i] = 40;
   		lastChangedActivities[i] = 0;
-  		minBrightness[i] = 0;
-  		maxBrightness[i] = 60;
+  		minBrightness[i] = 1;
+  		maxBrightness[i] = 25;
   		wasBrightnessJustChanged[i] = true;
   	}
   }
@@ -114,67 +105,56 @@ void readSensors() {
 
   for(int i = 0; i < NO_OF_CLUSTERS; i++) {
     pirVals[i] = digitalRead(pirPins[i]); // read input value
-    Serial.println(pirVals[i]);
-    //debugInt(char("PIRVAL " + char(i) + ": "), pirVals[i], false);
   }
 }
 
 void calculateLEDs() {
   for(int k = 0; k < NO_OF_CLUSTERS; k++) {
-  	debugString("------------LOOP START-------------", false);
   	// Turn the LED on, then pause
   	for(int i = 0; i < NUM_LEDS; i++) {
-  		debugString("------------LED IN-------------", false);
   		float contrast;
   		// The goal is reached, when it is 0
   		if(brightnessGoals[k][i] == 0) {
   			// A number between -1 and 1
   			contrast = PerlinNoise2(i, rnd, persistence, octaves);
-  			debugFloat("Contrast: ", contrast, false);
   			// Set the goal to contrast multiplied by max distance
   			brightnessGoals[k][i] = contrast * brightnessDistanceMax[i];
-  
-  			if(i == 0) {
-  				debugInt("New goal: ", brightnessGoals[k][i], false);
-  			}
+
+        if(shouldJumpBrightness[k]) {
+          shouldJumpBrightness[k] = false;
+        }
   		}
   
   		int brightnessChange = brightnessGoals[k][i] < 0 ? -1 : 1;
+      // If we are in high mode, multiply jump
+      brightnessChange *= minBrightness[k] == 25 ? 10 : 1;
   		int brightness = 0;
   
   		if(wasBrightnessJustChanged[k]) {
-  			debugInt("Minbright - ledsred: ", minBrightness[k] - leds[k][i].red, true);
-  			for(int j = leds[k][i].red; j < minBrightness[k] - leds[k][i].red; j++) {
-  				debugInt("j: ", j, false);
-  				brightness = j;
-  				updateLEDs(k, i, brightness);
-  			}
+        brightness = random(minBrightness[k], maxBrightness[k]);
+        updateLEDs(k, i, brightness);
   			wasBrightnessJustChanged[k] = false;
   		}
-  
+    
   		// Clamp brightness 
   		brightness = constrain(leds[k][i].red + brightnessChange, minBrightness[k], maxBrightness[k]);
   
-  		if(i == 0) {
-  			debugInt("Goal: ", brightnessGoals[i], false);
-  			debugFloat("Brightness: ", float(brightness), false);
-  		}
-      debugFloat("Brightness: ", float(brightness), false);
   		updateLEDs(k, i, brightness);
   
   		// Make the goal move one closer to 0
   		brightnessGoals[k][i] += brightnessGoals[k][i] < 0 ? 1 : -1;
-  
-  		debugString("------------LED OUT-------------", false);
   	}
-  	debugString("------------LOOP STOP-------------", false);
   }
 }
 
 void updateLEDs(int cluster, int pixel, int brightness) {
-	leds[cluster][pixel].red = brightness;
-	leds[cluster][pixel].green = brightness;
-	leds[cluster][pixel].blue = brightness;
+  float redMultiplier = 1;
+  float blueMultiplier = 1;
+  float greenMultiplier = 1;
+
+	leds[cluster][pixel].red = brightness * redMultiplier;
+	leds[cluster][pixel].green = brightness * greenMultiplier;
+	leds[cluster][pixel].blue = brightness * blueMultiplier;
 	FastLED.show();
 }
 
@@ -246,31 +226,4 @@ float PerlinNoise2(float x, float y, float persistance, int octaves) {
   }
 
   return(total);
-}
-
-void debugLong(char text[], long value, bool override) {
-	if(isDebugging || override) {
-		Serial.print(text);
-		Serial.println(value);
-	}
-}
-
-void debugInt(char text[], int value, bool override) {
-	if(isDebugging || override) {
-		Serial.print(text);
-		Serial.println(value);
-	}
-}
-
-void debugString(char text[], bool override) {
-	if(isDebugging || override) {
-		Serial.println(text);
-	}
-}
-
-void debugFloat(char text[], float value, bool override) {
-	if(isDebugging || override) {
-		Serial.print(text);
-		Serial.println(value);
-	}
 }
