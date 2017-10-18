@@ -3,33 +3,18 @@
 #include "FastLED.h"
 
 
-//#define PIRPIN A5
-//#define LEDPIN 7
-
-#define NO_OF_CLUSTERS 5
+#define NO_OF_CLUSTERS 3
 #define NUM_LEDS 25
 
-int pirPins[NO_OF_CLUSTERS] = {A1, A2, A3, A4, A5};
-const int ledPins[NO_OF_CLUSTERS] = {2, 3, 4, 5, 6};
 
-int pirStates[NO_OF_CLUSTERS] = {LOW, LOW, LOW, LOW, LOW};
-int pirVals[NO_OF_CLUSTERS] = {0, 0, 0, 0, 0};
+int pirPins[NO_OF_CLUSTERS] = {A1, A2, A3};
+const int ledPins[NO_OF_CLUSTERS] = {2, 3, 4};
+
+int pirStates[NO_OF_CLUSTERS] = {LOW, LOW, LOW};
+int pirVals[NO_OF_CLUSTERS] = {0, 0, 0};
 
 // Define the array of leds
 CRGB leds[NO_OF_CLUSTERS][NUM_LEDS];
-
-// Set a brightness level goal for each LED to reach
-int brightnessGoals[NO_OF_CLUSTERS][NUM_LEDS];
-// What should the maximum distance to new brightness goal be?
-int brightnessDistanceMax[NO_OF_CLUSTERS] = {20, 20, 20, 20, 20};
-int shouldJumpBrightness[NO_OF_CLUSTERS] = {false, false, false, false, false};
-int wasBrightnessJustChanged[NO_OF_CLUSTERS] = {false, false, false, false, false};
-
-int minBrightness[NO_OF_CLUSTERS] = {25, 25, 25, 25, 25};
-int maxBrightness[NO_OF_CLUSTERS] = {75, 75, 75, 75, 75};
-
-//int pirState = LOW; // we start, assuming no motion detected
-//int val = 0; // variable for reading the pin status
 
 //persistence affects the degree to which the "finer" noise is seen
 float persistence = 0.25;
@@ -37,13 +22,13 @@ float persistence = 0.25;
 int octaves = 1;
 float rnd = 0.0f;
 
-int actualActivities[NO_OF_CLUSTERS] = {0, 0, 0, 0, 0};
-int lastChangedActivities[NO_OF_CLUSTERS] = {150, 150, 150, 150, 150};
-int maxActivities[NO_OF_CLUSTERS] = {100, 100, 100, 100, 100};
-int activityDelays[NO_OF_CLUSTERS] = {5, 5, 5, 5, 5};
+int activeVariation = 10;
+int calmVariation = 2;
 
+bool isActive[NO_OF_CLUSTERS] = {false, false, false};
+bool lastStateWasActive[NO_OF_CLUSTERS] = { false, false, false};
 
-bool isDebugging = false;
+int currentBrightness[NO_OF_CLUSTERS][NUM_LEDS];
 
 void setup() {
 
@@ -52,31 +37,50 @@ void setup() {
   for (int i = 0; i < NO_OF_CLUSTERS; i++) {
     pinMode(pirPins[i], INPUT);
 
-    for(int j = 0; j < NUM_LEDS; j++) {
-      brightnessGoals[i][j] = 0;
+    // Initialize calm values for all
+    for (int j = 0; j < NUM_LEDS; j++) {
+      currentBrightness[i][j] = random(1, 25);
     }
   }
 
   FastLED.addLeds<NEOPIXEL, 2>(leds[0], NUM_LEDS);
   FastLED.addLeds<NEOPIXEL, 3>(leds[1], NUM_LEDS);
   FastLED.addLeds<NEOPIXEL, 4>(leds[2], NUM_LEDS);
-  FastLED.addLeds<NEOPIXEL, 5>(leds[3], NUM_LEDS);
-  FastLED.addLeds<NEOPIXEL, 6>(leds[4], NUM_LEDS);
 }
 
 void loop() {
-	rnd = float(millis())/100.0f;
-
-	readSensors();
+  rnd = float(millis())/100.0f;
+	//readSensors();
 
 	reactToActivity();
 
-	calculateLEDs();
+	//calculateLEDs();
 }
 
 void reactToActivity() {
-	// Get non-delayed activity level
 
+  for(int i = 0; i < NO_OF_CLUSTERS; i++) {
+    isActive[i] = digitalRead(pirPins[i]); // read input value
+
+    if(isActive[i] && !lastStateWasActive[i]) {
+      // Start active animation
+      updateAnimation(i, true, true); // The cluster, setNewBrightness, isActive
+    } else if (isActive[i] && lastStateWasActive[i]) { 
+      // Continue active animation
+      updateAnimation(i, false, true);
+    } else if(!isActive[i] && lastStateWasActive[i]) {
+      // Start calm animation
+      updateAnimation(i, true, false);
+    } else if (!isActive[i] && !lastStateWasActive[i]) {
+      // Continue calm animation
+      updateAnimation(i, false, false);
+    }
+
+    lastStateWasActive[i] = isActive[i];
+   }
+
+ 
+  /*
   for(int i = 0; i < NO_OF_CLUSTERS; i++) {
   	actualActivities[i] += (pirVals[i] == HIGH) ? 1 : -3;
   	// Make sure actualActivity is between maxActivity * activityDelay and 0
@@ -99,6 +103,7 @@ void reactToActivity() {
   		wasBrightnessJustChanged[i] = true;
   	}
   }
+  */
 }
 
 void readSensors() {
@@ -108,6 +113,72 @@ void readSensors() {
   }
 }
 
+
+/*
+ * Function to update the animation 
+ * 
+ * @param cluster - The cluster we're working with
+ * @param setNewBrightness - Should we give the leds a new brightness (if we change mode)
+ * @param isActive - True if we're to go to the active animation, false if calm animaition
+ */
+
+void updateAnimation(int cluster, boolean setNewBrightness, boolean isActiveAnimation) {
+  float red = 0;
+  int theDelay = 0;
+  for (int i = 0; i < NUM_LEDS; i++) {
+    int newBrightness;
+    
+    if(setNewBrightness) {
+      if(isActiveAnimation) {
+        newBrightness = random(40, 80);
+        red = 50;
+        theDelay = random(5, 15);
+        // Maybe set color to something different here
+      } else {
+        newBrightness = random(1, 25);
+      }
+    } else {
+      // Use perlin noise to step up or down
+      float contrast = PerlinNoise2(i, rnd, persistence, octaves);
+      // newBrightness = int(currentBrightness[cluster][i] * contrast);
+
+      /*
+      if(isActiveAnimation) {
+        if(cluster == 1) {
+          Serial.println("ACtive ongoing");
+        }
+        newBrightness = map(contrast, -0.5, 0.5, currentBrightness[cluster][i] - activeVariation, currentBrightness[cluster][i] + activeVariation);
+      } else {
+        //newBrightness = map(contrast, -0.5, 0.5, currentBrightness[cluster][i] - calmVariation, currentBrightness[cluster][i] + calmVariation);
+        newBrightness = random(10, 25);
+        //newBrightness = random(currentBrightness[cluster][i] - 5, currentBrightness[cluster][i] + 5);
+      }
+
+      */
+
+
+      // Alternatively, just random
+      
+      if(isActiveAnimation) {
+        newBrightness = random(currentBrightness[cluster][i] - activeVariation, currentBrightness[cluster][i] + activeVariation); 
+      } else {
+        newBrightness = random(currentBrightness[cluster][i] - calmVariation, currentBrightness[cluster][i] + calmVariation); 
+      }
+      
+    }
+
+    newBrightness = constrain(newBrightness, 1, 255);
+
+
+    currentBrightness[cluster][i] = newBrightness;
+
+ 
+    updateLEDs(cluster, i, currentBrightness[cluster][i], red, theDelay);
+  }
+}
+
+
+/*
 void calculateLEDs() {
   for(int k = 0; k < NO_OF_CLUSTERS; k++) {
   	// Turn the LED on, then pause
@@ -130,7 +201,7 @@ void calculateLEDs() {
       brightnessChange *= minBrightness[k] == 25 ? 10 : 1;
   		int brightness = 0;
   
-  		if(wasBrightnessJustChanged[k]) {
+  		if(wasBrightnessJustChanged[k]) { 
         brightness = random(minBrightness[k], maxBrightness[k]);
         updateLEDs(k, i, brightness);
   			wasBrightnessJustChanged[k] = false;
@@ -146,16 +217,23 @@ void calculateLEDs() {
   	}
   }
 }
+*/
 
-void updateLEDs(int cluster, int pixel, int brightness) {
-  float redMultiplier = 1;
-  float blueMultiplier = 1;
-  float greenMultiplier = 1;
+void updateLEDs(int cluster, int pixel, int theBrightness, int red, int theDelay) {
+  //float redMultiplier = 1;
+  // float blueMultiplier = 1;
+  // float greenMultiplier = 1;
 
-	leds[cluster][pixel].red = brightness * redMultiplier;
-	leds[cluster][pixel].green = brightness * greenMultiplier;
-	leds[cluster][pixel].blue = brightness * blueMultiplier;
+  // leds[cluster][pixel].red = brightness * redMultiplier;
+  // leds[cluster][pixel].green = brightness * blueMultiplier;
+  // leds[cluster][pixel].blue = brightness * greenMultiplier;
+
+	leds[cluster][pixel].red = theBrightness + red;
+	leds[cluster][pixel].green = theBrightness;
+	leds[cluster][pixel].blue = theBrightness;
 	FastLED.show();
+
+  delay(theDelay);
 }
 
 // Helper functions
