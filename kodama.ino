@@ -10,13 +10,13 @@ const int ledPin = 3;
 CRGB leds[NUM_LEDS];
 
 //persistence affects the degree to which the "finer" noise is seen
-float persistence = 0.75;
+const float persistence = 0.75;
 //octaves are the number of "layers" of noise that get computed
-int octaves = 1;
+const int octaves = 1;
 float millisPerFrame = 0.0f;
 const float minPerlin = -0.4f;
 const float maxPerlin = 0.4f;
-const float calmMin = 1.0f;
+const float calmMin = 20.0f;
 const float calmMax = 50.0f;
 const float activeMin = 50.0f;
 const float activeMax = 255.0f;
@@ -26,18 +26,20 @@ bool lastStateWasActive = false;
 
 int currentBrightness[NUM_LEDS];
 int newBrightness[NUM_LEDS];
+int pixelVariation[NUM_LEDS];
 bool shouldLerpLED[NUM_LEDS];
 
 void setup() {
 
   pinMode(pirPin, INPUT);
-  Serial.begin(9600);
+  // Serial.begin(9600);
 
   // Initialize calm values for all
   for(int i = 0; i < NUM_LEDS; i++) {
     currentBrightness[i] = random(1, 25);
     newBrightness[i] = currentBrightness[i];
     shouldLerpLED[i] = false;
+    pixelVariation[i] = random(-10, 10);
   }
 
   FastLED.addLeds<WS2812B, ledPin, COLOR_ORDER>(leds, NUM_LEDS);
@@ -83,7 +85,7 @@ void reactToActivity() {
  */
 
 void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
-  float green = 0;
+  int variation = 0;
   int theDelay = 0;
   // Use perlin noise to step up or down
 
@@ -104,7 +106,7 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
     if(setNewBrightness) {
       shouldLerpLED[i] = true;
       if(isActiveAnimation) {
-        green = 50;
+        variation = 20;
         theDelay = random(5, 15);
       }
     }
@@ -126,15 +128,16 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
     }
 
     // Update the LEDs
-    updateLEDs(i, currentBrightness[i], green, theDelay);
+    updateLEDs(i, currentBrightness[i], variation, theDelay);
   }
 }
 
-void updateLEDs(int pixel, int theBrightness, int green, int theDelay) {
-  leds[pixel].red = theBrightness;
-  int newGreen = constrain(theBrightness + green, 0, 255);
-	leds[pixel].green = newGreen;
-	leds[pixel].blue = theBrightness;
+void updateLEDs(int pixel, int theBrightness, int variation, int theDelay) {
+  // int newGreen = constrain(theBrightness + variation, 0, 255);
+  // leds[pixel].red = theBrightness;
+	// leds[pixel].green = newGreen;
+	// leds[pixel].blue = theBrightness;
+  leds[pixel] = CHSV(113 + pixelVariation[pixel] + variation, 120, theBrightness);
 	FastLED.show();
 
   delay(theDelay);
