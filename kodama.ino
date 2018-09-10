@@ -9,39 +9,43 @@ int pirPin = 4;
 const int ledPin = 3;
 
 int pirState = LOW;
-int pirVal = 0;
 
 // Define the array of leds
 CRGB leds[NUM_LEDS];
 
 //persistence affects the degree to which the "finer" noise is seen
-float persistence = 0.25;
+float persistence = 0.75;
 //octaves are the number of "layers" of noise that get computed
 int octaves = 1;
-float rnd = 0.0f;
+float millisPerFrame = 0.0f;
 
-int activeVariation = 10;
+int activeVariation = 4;
 int calmVariation = 2;
 
 bool isActive = false;
 bool lastStateWasActive = false;
 
 int currentBrightness[NUM_LEDS];
+int brightnessGoals[NUM_LEDS];
 
 void setup() {
 
   pinMode(pirPin, INPUT);
+  Serial.begin(9600);
 
   // Initialize calm values for all
-  for (int i = 0; i < NUM_LEDS; i++) {
+  for(int i = 0; i < NUM_LEDS; i++) {
     currentBrightness[i] = random(1, 25);
+  }
+  for(int i = 0; i < NUM_LEDS; i++) {
+    brightnessGoals[i] = currentBrightness[i] + 20;
   }
 
   FastLED.addLeds<WS2812B, ledPin, COLOR_ORDER>(leds, NUM_LEDS);
 }
 
 void loop() {
-  rnd = float(millis())/100.0f;
+  millisPerFrame = float(millis())/1000.0f;
 
 	reactToActivity();
 }
@@ -49,6 +53,8 @@ void loop() {
 void reactToActivity() {
 
   isActive = digitalRead(pirPin); // read input value
+
+  // Serial.println(isActive);
 
   if(isActive && !lastStateWasActive) {
     // Start active animation
@@ -66,11 +72,6 @@ void reactToActivity() {
 
   lastStateWasActive = isActive;
 }
-
-void readSensors() {
-  pirVal = digitalRead(pirPin); // read input value
-}
-
 
 /*
  * Function to update the animation 
@@ -92,28 +93,38 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
         green = 50;
         theDelay = random(5, 15);
         // Maybe set color to something different here
-      } else {
+      }
+      else {
         newBrightness = random(1, 25);
       }
-    } else {
+    }
+    else {
       // Use perlin noise to step up or down
-      float contrast = PerlinNoise2(i, rnd, persistence, octaves);
+      float contrast = PerlinNoise2(i, millisPerFrame, persistence, octaves);
+      // contrast = map(contrast, -1, 1, 0, 255);
+
       // Alternatively, just random
       
       if(isActiveAnimation) {
-        newBrightness = random(currentBrightness[i] - activeVariation, currentBrightness[i] + activeVariation); 
-      } else {
-        newBrightness = random(currentBrightness[i] - calmVariation, currentBrightness[i] + calmVariation); 
+        contrast = mapfloat(contrast, -0.4, 0.4, 50.0, 255.0);
+        // newBrightness = random(currentBrightness[i] - activeVariation, currentBrightness[i] + activeVariation); 
+        newBrightness = contrast;
+      }
+      else {
+        contrast = mapfloat(contrast, -0.5, 0.5, 1.0, 50.0);
+        newBrightness = contrast;
+        // newBrightness = random(currentBrightness[i] - calmVariation, currentBrightness[i] + calmVariation); 
+      }
+      if(i == 0) {
+        // Serial.print("Contrast: ");
+        Serial.println(contrast);
       }
       
     }
 
-    newBrightness = constrain(newBrightness, 1, 255);
-
-
+    newBrightness = constrain(newBrightness, 5, 255);
     currentBrightness[i] = newBrightness;
 
- 
     updateLEDs(i, currentBrightness[i], green, theDelay);
   }
 }
@@ -195,4 +206,8 @@ float PerlinNoise2(float x, float y, float persistance, int octaves) {
   }
 
   return(total);
+}
+
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max) {
+ return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
