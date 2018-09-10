@@ -16,9 +16,9 @@ const int octaves = 1;
 float millisPerFrame = 0.0f;
 const float minPerlin = -0.4f;
 const float maxPerlin = 0.4f;
-const float calmMin = 20.0f;
-const float calmMax = 50.0f;
-const float activeMin = 50.0f;
+const float calmMin = 40.0f;
+const float calmMax = 80.0f;
+const float activeMin = 80.0f;
 const float activeMax = 255.0f;
 
 bool isActive = false;
@@ -26,8 +26,15 @@ bool lastStateWasActive = false;
 
 int currentBrightness[NUM_LEDS];
 int newBrightness[NUM_LEDS];
-int pixelVariation[NUM_LEDS];
 bool shouldLerpLED[NUM_LEDS];
+int pixelVariation[NUM_LEDS];
+
+long keepActiveTimer = 0;
+const long keepActiveTimerLength = 2000;
+
+const int baseHue = 133;
+const int baseSat = 120;
+const int maxVariation = 130;
 
 void setup() {
 
@@ -39,7 +46,7 @@ void setup() {
     currentBrightness[i] = random(1, 25);
     newBrightness[i] = currentBrightness[i];
     shouldLerpLED[i] = false;
-    pixelVariation[i] = random(-10, 10);
+    pixelVariation[i] = 0;
   }
 
   FastLED.addLeds<WS2812B, ledPin, COLOR_ORDER>(leds, NUM_LEDS);
@@ -54,8 +61,6 @@ void loop() {
 void reactToActivity() {
 
   isActive = digitalRead(pirPin); // read input value
-
-  // Serial.println(isActive);
 
   if(isActive && !lastStateWasActive) {
     // Start active animation
@@ -106,9 +111,16 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
     if(setNewBrightness) {
       shouldLerpLED[i] = true;
       if(isActiveAnimation) {
-        variation = 20;
         theDelay = random(5, 15);
+        keepActiveTimer = millis();
       }
+    }
+
+    if(millis() < keepActiveTimer + keepActiveTimerLength) {
+      pixelVariation[i] = maxVariation;
+    }
+    else {
+      pixelVariation[i] = LinearInterpolate(pixelVariation[i], 0, 0.1);
     }
 
     // Lerp the LED brightness
@@ -117,7 +129,7 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
       currentBrightness[i] = constrain(currentBrightness[i], 5, 255);
 
       // until we reach the desired brightness
-      if(currentBrightness[i] == newBrightness[i]) {
+      if(abs(newBrightness[i] - currentBrightness[i]) < 3) {
         shouldLerpLED[i] = false;
       }
     }
@@ -137,7 +149,7 @@ void updateLEDs(int pixel, int theBrightness, int variation, int theDelay) {
   // leds[pixel].red = theBrightness;
 	// leds[pixel].green = newGreen;
 	// leds[pixel].blue = theBrightness;
-  leds[pixel] = CHSV(113 + pixelVariation[pixel] + variation, 120, theBrightness);
+  leds[pixel] = CHSV(baseHue, baseSat + pixelVariation[pixel], theBrightness);
 	FastLED.show();
 
   delay(theDelay);
