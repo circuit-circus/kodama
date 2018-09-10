@@ -1,14 +1,10 @@
-#include <Adafruit_NeoPixel.h>
-
 #include "FastLED.h"
 
 #define NUM_LEDS 25
 #define COLOR_ORDER RGB
 
-int pirPin = 4;
+const int pirPin = 4;
 const int ledPin = 3;
-
-int pirState = LOW;
 
 // Define the array of leds
 CRGB leds[NUM_LEDS];
@@ -18,15 +14,19 @@ float persistence = 0.75;
 //octaves are the number of "layers" of noise that get computed
 int octaves = 1;
 float millisPerFrame = 0.0f;
-
-int activeVariation = 4;
-int calmVariation = 2;
+const float minPerlin = -0.4f;
+const float maxPerlin = 0.4f;
+const float calmMin = 1.0f;
+const float calmMax = 50.0f;
+const float activeMin = 50.0f;
+const float activeMax = 255.0f;
 
 bool isActive = false;
 bool lastStateWasActive = false;
 
 int currentBrightness[NUM_LEDS];
-int brightnessGoals[NUM_LEDS];
+int newBrightness[NUM_LEDS];
+bool shouldLerpLED[NUM_LEDS];
 
 void setup() {
 
@@ -36,9 +36,8 @@ void setup() {
   // Initialize calm values for all
   for(int i = 0; i < NUM_LEDS; i++) {
     currentBrightness[i] = random(1, 25);
-  }
-  for(int i = 0; i < NUM_LEDS; i++) {
-    brightnessGoals[i] = currentBrightness[i] + 20;
+    newBrightness[i] = currentBrightness[i];
+    shouldLerpLED[i] = false;
   }
 
   FastLED.addLeds<WS2812B, ledPin, COLOR_ORDER>(leds, NUM_LEDS);
@@ -59,13 +58,16 @@ void reactToActivity() {
   if(isActive && !lastStateWasActive) {
     // Start active animation
     updateAnimation(true, true); // The cluster, setNewBrightness, isActive
-  } else if (isActive && lastStateWasActive) { 
+  }
+  else if (isActive && lastStateWasActive) { 
     // Continue active animation
     updateAnimation(false, true);
-  } else if(!isActive && lastStateWasActive) {
+  }
+  else if(!isActive && lastStateWasActive) {
     // Start calm animation
     updateAnimation(true, false);
-  } else if (!isActive && !lastStateWasActive) {
+  }
+  else if (!isActive && !lastStateWasActive) {
     // Continue calm animation
     updateAnimation(false, false);
   }
@@ -76,7 +78,6 @@ void reactToActivity() {
 /*
  * Function to update the animation 
  * 
- * @param cluster - The cluster we're working with
  * @param setNewBrightness - Should we give the leds a new brightness (if we change mode)
  * @param isActive - True if we're to go to the active animation, false if calm animaition
  */
@@ -84,54 +85,55 @@ void reactToActivity() {
 void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
   float green = 0;
   int theDelay = 0;
+  // Use perlin noise to step up or down
+
   for (int i = 0; i < NUM_LEDS; i++) {
-    int newBrightness;
-    
-    if(setNewBrightness) {
-      if(isActiveAnimation) {
-        newBrightness = random(40, 80);
-        green = 50;
-        theDelay = random(5, 15);
-        // Maybe set color to something different here
-      }
-      else {
-        newBrightness = random(1, 25);
-      }
+
+    float contrast = PerlinNoise2(i, millisPerFrame, persistence, octaves);
+    // Set the newBrightness based on perlin noise and activity
+    if(isActiveAnimation) {
+      contrast = mapfloat(contrast, minPerlin, maxPerlin, activeMin, activeMax);
+      newBrightness[i] = contrast;
     }
     else {
-      // Use perlin noise to step up or down
-      float contrast = PerlinNoise2(i, millisPerFrame, persistence, octaves);
-      // contrast = map(contrast, -1, 1, 0, 255);
-
-      // Alternatively, just random
-      
-      if(isActiveAnimation) {
-        contrast = mapfloat(contrast, -0.4, 0.4, 50.0, 255.0);
-        // newBrightness = random(currentBrightness[i] - activeVariation, currentBrightness[i] + activeVariation); 
-        newBrightness = contrast;
-      }
-      else {
-        contrast = mapfloat(contrast, -0.5, 0.5, 1.0, 50.0);
-        newBrightness = contrast;
-        // newBrightness = random(currentBrightness[i] - calmVariation, currentBrightness[i] + calmVariation); 
-      }
-      if(i == 0) {
-        // Serial.print("Contrast: ");
-        Serial.println(contrast);
-      }
-      
+      contrast = mapfloat(contrast, minPerlin, maxPerlin, calmMin, calmMax);
+      newBrightness[i] = contrast;
     }
 
-    newBrightness = constrain(newBrightness, 5, 255);
-    currentBrightness[i] = newBrightness;
+    // If we have recently seen change in action, do something with colors
+    if(setNewBrightness) {
+      shouldLerpLED[i] = true;
+      if(isActiveAnimation) {
+        green = 50;
+        theDelay = random(5, 15);
+      }
+    }
 
+    // Lerp the LED brightness
+    if(shouldLerpLED[i]) {
+      currentBrightness[i] = LinearInterpolate(currentBrightness[i], newBrightness[i], 0.5);
+      currentBrightness[i] = constrain(currentBrightness[i], 5, 255);
+
+      // until we reach the desired brightness
+      if(currentBrightness[i] == newBrightness[i]) {
+        shouldLerpLED[i] = false;
+      }
+    }
+    // Else just make sure to constrain it
+    else {
+      newBrightness[i] = constrain(newBrightness[i], 5, 255);
+      currentBrightness[i] = newBrightness[i];
+    }
+
+    // Update the LEDs
     updateLEDs(i, currentBrightness[i], green, theDelay);
   }
 }
 
 void updateLEDs(int pixel, int theBrightness, int green, int theDelay) {
-	leds[pixel].red = theBrightness;
-	leds[pixel].green = theBrightness + green;
+  leds[pixel].red = theBrightness;
+  int newGreen = constrain(theBrightness + green, 0, 255);
+	leds[pixel].green = newGreen;
 	leds[pixel].blue = theBrightness;
 	FastLED.show();
 
