@@ -3,6 +3,7 @@
 #include "FastLED.h"
 
 #define NUM_LEDS 25
+#define COLOR_ORDER RGB
 
 int pirPin = 4;
 const int ledPin = 3;
@@ -36,7 +37,7 @@ void setup() {
     currentBrightness[i] = random(1, 25);
   }
 
-  FastLED.addLeds<NEOPIXEL, ledPin>(leds, NUM_LEDS);
+  FastLED.addLeds<WS2812B, ledPin, COLOR_ORDER>(leds, NUM_LEDS);
 }
 
 void loop() {
@@ -80,7 +81,7 @@ void readSensors() {
  */
 
 void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
-  float red = 0;
+  float green = 0;
   int theDelay = 0;
   for (int i = 0; i < NUM_LEDS; i++) {
     int newBrightness;
@@ -88,7 +89,7 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
     if(setNewBrightness) {
       if(isActiveAnimation) {
         newBrightness = random(40, 80);
-        red = 50;
+        green = 50;
         theDelay = random(5, 15);
         // Maybe set color to something different here
       } else {
@@ -113,13 +114,13 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
     currentBrightness[i] = newBrightness;
 
  
-    updateLEDs(i, currentBrightness[i], red, theDelay);
+    updateLEDs(i, currentBrightness[i], green, theDelay);
   }
 }
 
-void updateLEDs(int pixel, int theBrightness, int red, int theDelay) {
-	leds[pixel].red = theBrightness + red;
-	leds[pixel].green = theBrightness;
+void updateLEDs(int pixel, int theBrightness, int green, int theDelay) {
+	leds[pixel].red = theBrightness;
+	leds[pixel].green = theBrightness + green;
 	leds[pixel].blue = theBrightness;
 	FastLED.show();
 
