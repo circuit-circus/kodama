@@ -14,12 +14,12 @@ const float persistence = 0.75;
 //octaves are the number of "layers" of noise that get computed
 const int octaves = 1;
 float millisPerFrame = 0.0f;
-const float minPerlin = -0.4f;
-const float maxPerlin = 0.4f;
-const float calmMin = 40.0f;
-const float calmMax = 80.0f;
-const float activeMin = 80.0f;
-const float activeMax = 255.0f;
+const int minPerlin = 0;
+const int maxPerlin = 255;
+const int calmMin = 40;
+const int calmMax = 80;
+const int activeMin = 80;
+const int activeMax = 255;
 
 bool isActive = false;
 bool lastStateWasActive = false;
@@ -32,14 +32,14 @@ int pixelVariation[NUM_LEDS];
 long keepActiveTimer = 0;
 const long keepActiveTimerLength = 2000;
 
-const int baseHue = 133;
+const int baseHue = 30;
 const int baseSat = 120;
 const int maxVariation = 130;
 
 void setup() {
 
   pinMode(pirPin, INPUT);
-  // Serial.begin(9600);
+  Serial.begin(9600);
 
   // Initialize calm values for all
   for(int i = 0; i < NUM_LEDS; i++) {
@@ -53,7 +53,7 @@ void setup() {
 }
 
 void loop() {
-  millisPerFrame = float(millis())/1000.0f;
+  millisPerFrame = float(millis());
 
 	reactToActivity();
 }
@@ -95,16 +95,21 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
   // Use perlin noise to step up or down
 
   for (int i = 0; i < NUM_LEDS; i++) {
+    // int i = random(0, NUM_LEDS + 1);
 
-    float contrast = PerlinNoise2(i, millisPerFrame, persistence, octaves);
+    //float contrast = PerlinNoise2(i, millisPerFrame, persistence, octaves);
+    uint8_t contrast = inoise8(i * 1000, millisPerFrame);
     // Set the newBrightness based on perlin noise and activity
     if(isActiveAnimation) {
-      contrast = mapfloat(contrast, minPerlin, maxPerlin, activeMin, activeMax);
+      contrast = map(contrast, minPerlin, maxPerlin, activeMin, activeMax);
       newBrightness[i] = contrast;
     }
     else {
-      contrast = mapfloat(contrast, minPerlin, maxPerlin, calmMin, calmMax);
+      contrast = map(contrast, minPerlin, maxPerlin, calmMin, calmMax);
       newBrightness[i] = contrast;
+    }
+    if(i == 0) {
+     Serial.println(contrast); 
     }
 
     // If we have recently seen change in action, do something with colors
@@ -150,7 +155,7 @@ void updateLEDs(int pixel, int theBrightness, int variation, int theDelay) {
 	// leds[pixel].green = newGreen;
 	// leds[pixel].blue = theBrightness;
   leds[pixel] = CHSV(baseHue, baseSat + pixelVariation[pixel], theBrightness);
-	FastLED.show();
+  FastLED.show();
 
   delay(theDelay);
 }
