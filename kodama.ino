@@ -9,13 +9,10 @@ const int ledPin = 3;
 // Define the array of leds
 CRGB leds[NUM_LEDS];
 
-//persistence affects the degree to which the "finer" noise is seen
-const float persistence = 0.75;
-//octaves are the number of "layers" of noise that get computed
-const int octaves = 1;
-
 // This is updated every loop to increase the calculated noise
 float millisPerFrame = 0.0f;
+// Change this to increase the update speed of the calculated noise
+const float noiseSpeed = 1.0f;
 
 // What are the min and max brightnesses overall
 const int minBrightness = 0;
@@ -69,7 +66,7 @@ void setup() {
 
 void loop() {
   // Change the divisor to change the speed of the noise changes
-  millisPerFrame = float(millis() / 1.0f);
+  millisPerFrame = float(millis() / noiseSpeed);
 
 	reactToActivity();
 }
