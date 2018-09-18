@@ -13,51 +13,71 @@ CRGB leds[NUM_LEDS];
 const float persistence = 0.75;
 //octaves are the number of "layers" of noise that get computed
 const int octaves = 1;
+
+// This is updated every loop to increase the calculated noise
 float millisPerFrame = 0.0f;
-const int minPerlin = 0;
-const int maxPerlin = 255;
+
+// What are the min and max brightnesses overall
+const int minBrightness = 0;
+const int maxBrightness = 255;
+// What are the min and max brightnesses in calm mode
 const int calmMin = 40;
 const int calmMax = 80;
+// What are the min and max brightnesses in active mode
 const int activeMin = 80;
 const int activeMax = 255;
 
+// Keeps track of the PIR activity
 bool isActive = false;
 bool lastStateWasActive = false;
 
+// Variables used for lerping
+// What is the LED's present brightness
 int currentBrightness[NUM_LEDS];
+// What is the LED's future brightness
 int newBrightness[NUM_LEDS];
+// Should this LED lerp towards newBrightness
 bool shouldLerpLED[NUM_LEDS];
-int pixelVariation[NUM_LEDS];
 
+// A variable used when fading saturation after change in activity
+int satVariation = 0;
+
+// In order to show the LEDs as active for a while after change in activity, we monitor a timer
 long keepActiveTimer = 0;
 const long keepActiveTimerLength = 2000;
 
+// Helper variables to easily prototype different hues and saturations
 const int baseHue = 30;
 const int baseSat = 120;
+
+// Helper variables to easily prototype different hues and saturations
 const int maxVariation = 130;
 
 void setup() {
 
   pinMode(pirPin, INPUT);
-  Serial.begin(9600);
 
-  // Initialize calm values for all
+  // Initialize random calm values for all
   for(int i = 0; i < NUM_LEDS; i++) {
     currentBrightness[i] = random(1, 25);
     newBrightness[i] = currentBrightness[i];
     shouldLerpLED[i] = false;
-    pixelVariation[i] = 0;
   }
 
   FastLED.addLeds<WS2812B, ledPin, COLOR_ORDER>(leds, NUM_LEDS);
 }
 
 void loop() {
-  millisPerFrame = float(millis());
+  // Change the divisor to change the speed of the noise changes
+  millisPerFrame = float(millis() / 1.0f);
 
 	reactToActivity();
 }
 
+/*
+ * Reads the PIR sensor and calls the correct function depending on current and past activity
+ * 
+ */
 void reactToActivity() {
 
   isActive = digitalRead(pirPin); // read input value
@@ -92,24 +112,20 @@ void reactToActivity() {
 void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
   int variation = 0;
   int theDelay = 0;
-  // Use perlin noise to step up or down
 
   for (int i = 0; i < NUM_LEDS; i++) {
-    // int i = random(0, NUM_LEDS + 1);
-
-    //float contrast = PerlinNoise2(i, millisPerFrame, persistence, octaves);
+    // Use FastLED's builtin noise function 
+    // Multiply i by 1000 to make sure that each LED has different behavior
     uint8_t contrast = inoise8(i * 1000, millisPerFrame);
+
     // Set the newBrightness based on perlin noise and activity
     if(isActiveAnimation) {
-      contrast = map(contrast, minPerlin, maxPerlin, activeMin, activeMax);
+      contrast = map(contrast, minBrightness, maxBrightness, activeMin, activeMax);
       newBrightness[i] = contrast;
     }
     else {
-      contrast = map(contrast, minPerlin, maxPerlin, calmMin, calmMax);
+      contrast = map(contrast, minBrightness, maxBrightness, calmMin, calmMax);
       newBrightness[i] = contrast;
-    }
-    if(i == 0) {
-     Serial.println(contrast); 
     }
 
     // If we have recently seen change in action, do something with colors
@@ -122,10 +138,10 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
     }
 
     if(millis() < keepActiveTimer + keepActiveTimerLength) {
-      pixelVariation[i] = maxVariation;
+      satVariation = maxVariation;
     }
     else {
-      pixelVariation[i] = LinearInterpolate(pixelVariation[i], 0, 0.1);
+      satVariation = LinearInterpolate(satVariation, 0, 0.1);
     }
 
     // Lerp the LED brightness
@@ -149,87 +165,30 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
   }
 }
 
+/*
+ * Updates an individual LED based on given parameters
+ * 
+ * @param pixel - The index of the LED to change
+ * @param theBrightness - The brightness to apply to the LED
+ * @param variation - A variation that changes the saturation of the LED
+ * @param theDelay - A delay that can be added after this LED for added effect
+ */
+
 void updateLEDs(int pixel, int theBrightness, int variation, int theDelay) {
-  // int newGreen = constrain(theBrightness + variation, 0, 255);
-  // leds[pixel].red = theBrightness;
-	// leds[pixel].green = newGreen;
-	// leds[pixel].blue = theBrightness;
-  leds[pixel] = CHSV(baseHue, baseSat + pixelVariation[pixel], theBrightness);
+  leds[pixel] = CHSV(baseHue, baseSat + satVariation, theBrightness);
   FastLED.show();
 
   delay(theDelay);
 }
 
 // Helper functions
-// using the algorithm from http://freespace.virgin.net/hugo.elias/models/m_perlin.html
-// thanks to hugo elias
-float Noise2(float x, float y) {
-  long noise;
-  noise = x + y * 57;
-  noise = (noise << 13) ^ noise;
-  return ( 1.0 - ( long(noise * (noise * noise * 15731L + 789221L) + 1376312589L) & 0x7fffffff) / 1073741824.0);
-}
-
-float SmoothNoise2(float x, float y) {
-  float corners, sides, center;
-  corners = ( Noise2(x-1, y-1)+Noise2(x+1, y-1)+Noise2(x-1, y+1)+Noise2(x+1, y+1) ) / 16;
-  sides   = ( Noise2(x-1, y)  +Noise2(x+1, y)  +Noise2(x, y-1)  +Noise2(x, y+1) ) /  8;
-  center  =  Noise2(x, y) / 4;
-  return (corners + sides + center);
-}
-
-float InterpolatedNoise2(float x, float y) {
-  float v1,v2,v3,v4,i1,i2,fractionX,fractionY;
-  long longX,longY;
-
-  longX = long(x);
-  fractionX = x - longX;
-
-  longY = long(y);
-  fractionY = y - longY;
-
-  v1 = SmoothNoise2(longX, longY);
-  v2 = SmoothNoise2(longX + 1, longY);
-  v3 = SmoothNoise2(longX, longY + 1);
-  v4 = SmoothNoise2(longX + 1, longY + 1);
-
-  i1 = Interpolate(v1 , v2 , fractionX);
-  i2 = Interpolate(v3 , v4 , fractionX);
-
-  return(Interpolate(i1 , i2 , fractionY));
-}
-
-float Interpolate(float a, float b, float x) {
-  //cosine interpolations
-  return(CosineInterpolate(a, b, x));
-}
-
+/*
+ * Interpolate between two variables, a & b, by x
+ * 
+ * @param a - The variable to interpolate from
+ * @param b - The variable to interpolate to
+ * @param x - The variable that controls how much to interpolate by
+ */
 float LinearInterpolate(float a, float b, float x) {
-  return(a*(1-x) + b*x);
-}
-
-float CosineInterpolate(float a, float b, float x) {
-  float ft = x * 3.1415927;
-  float f = (1 - cos(ft)) * .5;
-
-  return(a*(1-f) + b*f);
-}
-
-float PerlinNoise2(float x, float y, float persistance, int octaves) {
-  float frequency, amplitude;
-  float total = 0.0;
-
-  for (int i = 0; i <= octaves - 1; i++)
-  {
-    frequency = pow(2,i);
-    amplitude = pow(persistence,i);
-
-    total = total + InterpolatedNoise2(x * frequency, y * frequency) * amplitude;
-  }
-
-  return(total);
-}
-
-float mapfloat(float x, float in_min, float in_max, float out_min, float out_max) {
- return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+  return(a * (1 - x) + b * x);
 }
