@@ -37,7 +37,7 @@ int newBrightness[NUM_LEDS];
 bool shouldLerpLED[NUM_LEDS];
 
 // A variable used when fading saturation after change in activity
-int satVariation = 0;
+int hueVariation = 0;
 
 // In order to show the LEDs as active for a while after change in activity, we monitor a timer
 long keepActiveTimer = 0;
@@ -45,10 +45,11 @@ const long keepActiveTimerLength = 2000;
 
 // Helper variables to easily prototype different hues and saturations
 const int baseHue = 30;
-const int baseSat = 120;
+const int activeHue = 40;
+const int baseSat = 180;
 
 // Helper variables to easily prototype different hues and saturations
-const int maxVariation = 130;
+const int maxVariation = 10;
 
 void setup() {
 
@@ -107,8 +108,14 @@ void reactToActivity() {
  */
 
 void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
-  int variation = 0;
   int theDelay = 0;
+
+  if(millis() < keepActiveTimer + keepActiveTimerLength) {
+    hueVariation = abs(baseHue - activeHue);
+  }
+  else {
+    hueVariation = LinearInterpolate(hueVariation, 0, 0.001);
+  }
 
   for (int i = 0; i < NUM_LEDS; i++) {
     // Use FastLED's builtin noise function 
@@ -134,16 +141,14 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
       }
     }
 
-    if(millis() < keepActiveTimer + keepActiveTimerLength) {
-      satVariation = maxVariation;
-    }
-    else {
-      satVariation = LinearInterpolate(satVariation, 0, 0.1);
-    }
-
     // Lerp the LED brightness
     if(shouldLerpLED[i]) {
-      currentBrightness[i] = LinearInterpolate(currentBrightness[i], newBrightness[i], 0.5);
+      if(isActiveAnimation) {
+        currentBrightness[i] = LinearInterpolate(currentBrightness[i], newBrightness[i], 0.5);
+      }
+      else {
+        currentBrightness[i] = LinearInterpolate(currentBrightness[i], newBrightness[i], 0.1);
+      }
       currentBrightness[i] = constrain(currentBrightness[i], 5, 255);
 
       // until we reach the desired brightness
@@ -151,14 +156,14 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
         shouldLerpLED[i] = false;
       }
     }
-    // Else just make sure to constrain it
+    // Else just make sure to constrain it and set it to the noise
     else {
       newBrightness[i] = constrain(newBrightness[i], 5, 255);
       currentBrightness[i] = newBrightness[i];
     }
 
     // Update the LEDs
-    updateLEDs(i, currentBrightness[i], variation, theDelay);
+    updateLEDs(i, currentBrightness[i], hueVariation, theDelay);
   }
 }
 
@@ -172,7 +177,13 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
  */
 
 void updateLEDs(int pixel, int theBrightness, int variation, int theDelay) {
-  leds[pixel] = CHSV(baseHue, baseSat + satVariation, theBrightness);
+  /*if(variation > 0) {
+    leds[pixel] = CHSV(activeHue, baseSat, theBrightness);
+  }
+  else {
+    leds[pixel] = CHSV(baseHue, baseSat, theBrightness);
+  }*/
+  leds[pixel] = CHSV(baseHue + variation, baseSat, theBrightness);
   FastLED.show();
 
   delay(theDelay);
