@@ -13,16 +13,16 @@ CRGB leds[NUM_LEDS];
 float millisPerFrame = 0.0f;
 // Change this to increase the update speed of the calculated noise
 // increasing this, decreases the speed of the noise 
-const float noiseSpeed = 3.0f;
+float noiseSpeed = 3.0f;
 
 // What are the min and max brightnesses overall
 const int minBrightness = 0;
 const int maxBrightness = 255;
 // What are the min and max brightnesses in calm mode
-const int calmMin = 40;
-const int calmMax = 80;
+const int calmMin = 50;
+const int calmMax = 90;
 // What are the min and max brightnesses in active mode
-const int activeMin = 80;
+const int activeMin = 90;
 const int activeMax = 255;
 
 // Keeps track of the PIR activity
@@ -117,6 +117,8 @@ void updateAnimation(boolean setNewBrightness, boolean isActiveAnimation) {
   else {
     hueVariation = LinearInterpolate(hueVariation, 0, 0.001);
   }
+
+  noiseSpeed = isActiveAnimation ? 1.5f : 3.0f;
 
   for (int i = 0; i < NUM_LEDS; i++) {
     // Use FastLED's builtin noise function 
